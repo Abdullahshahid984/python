@@ -68,14 +68,20 @@ jobs:
 
       - name: Install Latest Trivy Native CLI
         if: github.event.inputs.environment == 'production' || github.ref == 'refs/heads/main'
-        uses: aquasecurity/setup-trivy@v0.2.2
+        uses: aquasecurity/setup-trivy@main # Automatically tracks future updates to the action itself
         with:
-          version: latest
+          version: latest                # Automatically tracks future releases of the Trivy CLI binary
 
       - name: Run Trivy vulnerability scanner (Prod Only)
         if: github.event.inputs.environment == 'production' || github.ref == 'refs/heads/main'
         run: |
+          # 1. Prints your exact command view cleanly in the standard runner terminal
           trivy image --pkg-relationships direct "${{ steps.build-image.outputs.image-uri }}"
+          
+          # 2. Generates an interactive markdown summary page on your GitHub Action Run Overview
+          echo "### Trivy Scan Summary" >> $GITHUB_STEP_SUMMARY
+          trivy image --format github --pkg-relationships direct --output trivy-summary.md "${{ steps.build-image.outputs.image-uri }}"
+          cat trivy-summary.md >> $GITHUB_STEP_SUMMARY
 
       - name: Push Docker image to Amazon ECR
         run: |
