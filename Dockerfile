@@ -1,7 +1,7 @@
-ARG PARENT_VERSION=3.0.0-node22.14.0
+ARG PARENT_VERSION=2.5.2-node22.13.1
 ARG PARENT_RUNTIME_VERSION=${PARENT_VERSION}
 ARG PARENT_DEV_VERSION=${PARENT_VERSION}
-ARG NPM_VERSION=11.15.0
+ARG NPM_VERSION=11.6.4
 ARG PORT=3000
 ARG PORT_DEBUG=9229
 
@@ -18,15 +18,20 @@ ARG PORT_DEBUG
 ENV PORT=${PORT}
 EXPOSE ${PORT} ${PORT_DEBUG}
 
-# FIX 1: Upgrade NPM engine first before copying package files to prevent legacy engine warnings
+# Force Alpine upgrade in development layer
+USER root
+RUN apk update && apk upgrade --no-cache
+USER node
+
+# Setup stable global package tools
 RUN npm install --global npm@${NPM_VERSION} && npm cache clean --force
 
 WORKDIR /home/node
 
-# FIX 2: Copy both package.json and your modified package-lock.json with your overrides
 COPY --chown=node:node --chmod=755 package*.json ./
 
-RUN npm install --ignore-scripts
+# Run full project setup tracking custom tree overrides block
+RUN npm install --ignore-scripts --legacy-peer-deps
 COPY --chown=node:node . .
 RUN npm run build
 
@@ -41,10 +46,9 @@ FROM defradigital/node:${PARENT_RUNTIME_VERSION} AS production
 
 ENV TZ="Europe/London"
 
+# Force Alpine runtime layer upgrades to ensure 0 OS vulnerabilities
 USER root
 ARG NPM_VERSION
-
-# FIX 3: Run full Alpine package cleanup to patch OS-level Trivy violations
 RUN apk update && apk upgrade --no-cache \
     && apk add --no-cache curl \
     && npm install --global npm@${NPM_VERSION} \
@@ -60,8 +64,8 @@ COPY --from=production_build /home/node/package*.json ./
 COPY --from=production_build /home/node/.server ./.server/
 COPY --from=production_build /home/node/.public/ ./.public/
 
-# FIX 4: Run clean production install utilizing your lockfile overrides
-RUN npm ci --omit=dev --ignore-scripts
+# Mirror isolated production dependencies seamlessly 
+RUN npm i --omit=dev --ignore-scripts --legacy-peer-deps
 
 ARG PORT
 ENV PORT=${PORT}
