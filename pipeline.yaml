@@ -32,7 +32,6 @@ jobs:
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'eu-west-2' }}
       ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
-      IS_PROD: ${{ github.event.inputs.environment == 'production' || github.ref == 'refs/heads/main' }}
     steps:
       - name: Checkout code repository
         uses: actions/checkout@v4
@@ -68,13 +67,13 @@ jobs:
           docker build --no-cache --tag "$IMAGE_URI" .
 
       - name: Install Latest Trivy Native CLI
-        if: env.IS_PROD == 'true'
+        if: github.event.inputs.environment == 'production' || github.ref == 'refs/heads/main'
         uses: aquasecurity/setup-trivy@v0.2.2
         with:
           version: latest
 
       - name: Run Trivy vulnerability scanner (Prod Only)
-        if: env.IS_PROD == 'true'
+        if: github.event.inputs.environment == 'production' || github.ref == 'refs/heads/main'
         run: |
           trivy image --pkg-relationships direct "${{ steps.build-image.outputs.image-uri }}"
 
