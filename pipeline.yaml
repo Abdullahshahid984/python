@@ -77,7 +77,7 @@ jobs:
           trivy image --pkg-relationships direct "${{ steps.build-image.outputs.image-uri }}"
           
           # 2. Generates an interactive markdown file cleanly
-          trivy image --format github --pkg-relationships direct --output trivy-summary.md "${{ steps.build-image.outputs.image-uri }}"
+           trivy image --format github --output trivy-summary.md "${{ steps.build-image.outputs.image-uri }}"
           
           # 3. Appends the file to the native GitHub summary dashboard
           echo "### Trivy Scan Summary" >> $GITHUB_STEP_SUMMARY
