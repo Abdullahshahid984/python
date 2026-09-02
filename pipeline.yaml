@@ -76,12 +76,6 @@ jobs:
           # 1. Prints your exact command view cleanly in the standard runner terminal
           trivy image --pkg-relationships direct "${{ steps.build-image.outputs.image-uri }}"
           
-          # 2. Generates an interactive markdown file cleanly
-           trivy image --format github --output trivy-summary.md "${{ steps.build-image.outputs.image-uri }}"
-          
-          # 3. Appends the file to the native GitHub summary dashboard
-          echo "### Trivy Scan Summary" >> $GITHUB_STEP_SUMMARY
-          cat trivy-summary.md >> $GITHUB_STEP_SUMMARY
 
       - name: Push Docker image to Amazon ECR
         run: |
