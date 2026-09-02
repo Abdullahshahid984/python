@@ -1,1 +1,1 @@
-aws ecs describe-tasks --cluster your-cluster --tasks TASK_ARN --region eu-west-2 --query 'tasks[0].attachments[?name==`elasticNetworkInterface`].details[?name==`privateIPv4Address`].value'
+   aws ecs describe-tasks --cluster local-sites-forms-runner-dev-cluster --tasks YOUR_TASK_ARN --region eu-west-2 --query 'tasks[0].attachments[0].details' --output table
