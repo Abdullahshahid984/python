@@ -1,109 +1,19 @@
-name: Publish
-run-name: Publish - ${{ github.head_ref || github.ref_name }} by @${{ github.actor }}
-on:
-  push:
-    branches-ignore: [main]
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Environment'
-        required: true
-        default: 'development'
-  workflow_call:
-    outputs:
-      image-uri:
-        description: Built image URI
-        value: ${{ jobs.publish.outputs.image-uri }}
-permissions:
-  contents: read
-  id-token: write
-jobs:
-  test:
-    uses: ./.github/workflows/test.yml
-    
-  publish:
-    runs-on: ubuntu-latest
-    needs: [test]
-    outputs:
-      image-uri: ${{ steps.build-image.outputs.image-uri }}
-    env:
-      AWS_REGION: ${{ vars.AWS_REGION || 'eu-west-2' }}
-      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
-    steps:
-      - name: Checkout code repository
-        uses: actions/checkout@v4
-      
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::062073933793:role/GitHubAction-AssumeRoleWithAction
-          role-session-name: GitHub_to_AWS_via_FederatedOIDC
-          aws-region: eu-west-2
-      
-      - name: Check GetCallerIdentity
-        run: |
-          aws sts get-caller-identity
-      
-      - name: Log in to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-      
-      - name: Build Docker image
-        id: build-image
-        run: |
-          if [ -z "$ECR_REPOSITORY" ]; then
-            echo "ECR_REPOSITORY is not set"
-            exit 1
-          fi
-          RELEASE_TAG="release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${GITHUB_SHA::7}"
-          IMAGE_URI="${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:${RELEASE_TAG}"
-          echo "IMAGE_URI=$IMAGE_URI" >> "$GITHUB_ENV"
-          echo "image-uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
-          docker build --no-cache --tag "$IMAGE_URI" .
-      
-      - name: Install Latest Trivy Native CLI
-        uses: aquasecurity/setup-trivy@main
-        with:
-          version: latest
-      
-      - name: Run Trivy vulnerability scanner
-        run: |
-          trivy image --pkg-relationships direct "${{ steps.build-image.outputs.image-uri }}"
-      
-      - name: Push Docker image to Amazon ECR
-        run: |
-          docker push "${{ steps.build-image.outputs.image-uri }}"
-      
       - name: Tag image as latest
         run: |
-          RELEASE_TAG="release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${GITHUB_SHA::7}"
+          SOURCE_IMAGE="${{ steps.build-image.outputs.image-uri }}"
+          LATEST_IMAGE="${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:latest"
           
-          # Get the image manifest for the release tag
+          # Get the image manifest
           MANIFEST=$(aws ecr batch-get-image \
             --repository-name $ECR_REPOSITORY \
-            --image-ids imageTag=$RELEASE_TAG \
+            --image-ids imageTag=$(echo $SOURCE_IMAGE | cut -d: -f2) \
             --query 'images[0].imageManifest' \
-            --output text \
-            --region $AWS_REGION)
-          
-          if [ -z "$MANIFEST" ]; then
-            echo "Failed to get manifest for image with tag $RELEASE_TAG"
-            exit 1
-          fi
+            --output text)
           
           # Tag it as latest
           aws ecr put-image \
             --repository-name $ECR_REPOSITORY \
             --image-tag latest \
-            --image-manifest "$MANIFEST" \
-            --region $AWS_REGION
+            --image-manifest "$MANIFEST"
           
-          echo "Successfully tagged image as latest"
-  
-  deploy:
-    needs: [publish]
-    uses: ./.github/workflows/deploy.yml
-    with:
-      environment: ${{ github.event.inputs.environment || 'development' }}
-      image-uri: ${{ needs.publish.outputs.image-uri }}
-    secrets: inherit
+          echo "Tagged $SOURCE_IMAGE as $LATEST_IMAGE"
